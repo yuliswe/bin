@@ -1,5 +1,5 @@
 {
-  "name": "my-app",
+  "name": "bin",
   "version": "0.0.1",
   "description": "My App Template",
   "type": "module",
@@ -15,6 +15,7 @@
   "bugs": {},
   "homepage": "",
   "devDependencies": {
+    "@types/express": "^5.0.0",
     "@typescript-eslint/eslint-plugin": "^7.0.2",
     "eslint": "^8.57.0",
     "eslint-plugin-jest": "^27.9.0",
@@ -27,6 +28,7 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
-    "@types/jest": "^29.5.12"
+    "@types/jest": "^29.5.12",
+    "express": "^4.21.2"
   }
 }
