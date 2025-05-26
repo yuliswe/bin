@@ -73,8 +73,12 @@ const server = http.createServer(app);
 // For any request, simply pipe the request stream to the response.
 app.all("*", ((req, res) => {
   const timestamp = new Date().toISOString();
+  const ip =
+    req.headers["x-forwarded-for"]?.toString().split(",")[0].trim() ??
+    req.socket.remoteAddress;
   const message = [
     chalk.cyan(`[${timestamp}] ${req.method} ${req.url}`),
+    chalk.yellow(`Your IP: ${ip}`),
     chalk.gray(inspect(req.headers)),
     inspect(req.body, { depth: null }),
   ].join("\n");
