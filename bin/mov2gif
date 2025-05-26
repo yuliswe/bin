@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+#
+# mov2gif.sh — convert a .mov to a high-quality GIF using ffmpeg’s palette method
+# macOS-compatible
+#
+# Usage:
+#   ./mov2gif.sh -i input.mov [-o output.gif] [-f fps] [-w width]
+#
+# Options:
+#   -i  Input .mov file (required)
+#   -o  Output .gif file (default: same directory & base name as input)
+#   -f  Frames per second (default: 50)
+#   -w  Width in pixels; height auto-scaled (default: 320)
+#   -h  Show this help message
+
+set -euo pipefail
+
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") -i input.mov [-o output.gif] [-f fps] [-w width]
+
+Options:
+  -i  Input .mov file (required)
+  -o  Output .gif file (default: same directory & base name as input)
+  -f  Frames per second (default: 50)
+  -w  Width in pixels; height auto-scaled (default: 320)
+  -h  Show this help message
+EOF
+}
+
+# defaults
+fps=50
+width=320
+output=""
+input=""
+
+# parse args
+while getopts "i:o:f:w:h" opt; do
+  case "$opt" in
+    i) input="$OPTARG" ;;
+    o) output="$OPTARG" ;;
+    f) fps="$OPTARG" ;;
+    w) width="$OPTARG" ;;
+    h|*) usage; exit 0 ;;
+  esac
+done
+
+# validate input
+if [[ -z "$input" ]]; then
+  echo "Error: input .mov is required" >&2
+  usage
+  exit 1
+fi
+
+# derive default output if not provided
+if [[ -z "$output" ]]; then
+  dir=$(dirname "$input")
+  base=$(basename "$input")
+  name="${base%.*}"
+  output="$dir/$name.gif"
+fi
+
+# create a temporary palette file (macOS-friendly template)
+palette=$(mktemp /tmp/palette.XXXXXX.png)
+
+# ensure cleanup on exit
+trap 'rm -f "$palette"' EXIT
+
+echo "Generating palette for '$input' at ${fps} fps, width ${width}px…"
+ffmpeg -v warning -i "$input" \
+  -vf "fps=${fps},scale=${width}:-1:flags=lanczos,palettegen" \
+  -frames:v 1 \
+  -y "$palette"
+
+echo "Creating GIF → '$output'…"
+ffmpeg -v warning -i "$input" \
+  -i "$palette" \
+  -filter_complex "fps=${fps},scale=${width}:-1:flags=lanczos[x];[x][1:v]paletteuse" \
+  -y "$output"
+
+echo "✅ Done! GIF saved to $output"
