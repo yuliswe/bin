@@ -4,40 +4,42 @@
 # macOS-compatible
 #
 # Usage:
-#   ./mov2gif.sh -i input.mov [-o output.gif] [-f fps] [-w width]
+#   ./mov2gif.sh input.mov [-o output.gif] [-f fps] [-w width]
 #
 # Options:
-#   -i  Input .mov file (required)
-#   -o  Output .gif file (default: same directory & base name as input)
-#   -f  Frames per second (default: 50)
-#   -w  Width in pixels; height auto-scaled (default: 320)
+#   input.mov              Input .mov file (required, positional)
+#   -o  Output .gif file   (default: same directory & base name as input)
+#   -f  Frames per second  (default: $DEFAULT_FPS)
+#   -w  Width in pixels    (auto-scaled height; default: $DEFAULT_WIDTH)
 #   -h  Show this help message
 
 set -euo pipefail
 
+# Defaults
+DEFAULT_FPS=30
+DEFAULT_WIDTH=320
+
+fps=$DEFAULT_FPS
+width=$DEFAULT_WIDTH
+output=""
+input=""
+
 usage() {
   cat <<EOF
-Usage: $(basename "$0") -i input.mov [-o output.gif] [-f fps] [-w width]
+Usage: $(basename "$0") input.mov [-o output.gif] [-f fps] [-w width]
 
 Options:
-  -i  Input .mov file (required)
-  -o  Output .gif file (default: same directory & base name as input)
-  -f  Frames per second (default: 50)
-  -w  Width in pixels; height auto-scaled (default: 320)
+  input.mov              Input .mov file (required, positional)
+  -o  Output .gif file   (default: same directory & base name as input)
+  -f  Frames per second  (default: $DEFAULT_FPS)
+  -w  Width in pixels    (auto-scaled height; default: $DEFAULT_WIDTH)
   -h  Show this help message
 EOF
 }
 
-# defaults
-fps=50
-width=320
-output=""
-input=""
-
-# parse args
-while getopts "i:o:f:w:h" opt; do
+# Parse optional flags
+while getopts "o:f:w:h" opt; do
   case "$opt" in
-    i) input="$OPTARG" ;;
     o) output="$OPTARG" ;;
     f) fps="$OPTARG" ;;
     w) width="$OPTARG" ;;
@@ -45,14 +47,19 @@ while getopts "i:o:f:w:h" opt; do
   esac
 done
 
-# validate input
+# Shift to positional argument
+shift $((OPTIND - 1))
+
+# Get input.mov from position
+input="${1:-}"
+
 if [[ -z "$input" ]]; then
-  echo "Error: input .mov is required" >&2
+  echo "Error: input .mov file is required." >&2
   usage
   exit 1
 fi
 
-# derive default output if not provided
+# Derive default output if not provided
 if [[ -z "$output" ]]; then
   dir=$(dirname "$input")
   base=$(basename "$input")
@@ -60,10 +67,8 @@ if [[ -z "$output" ]]; then
   output="$dir/$name.gif"
 fi
 
-# create a temporary palette file (macOS-friendly template)
+# Create a temporary palette file (macOS-friendly)
 palette=$(mktemp /tmp/palette.XXXXXX.png)
-
-# ensure cleanup on exit
 trap 'rm -f "$palette"' EXIT
 
 echo "Generating palette for '$input' at ${fps} fps, width ${width}px…"

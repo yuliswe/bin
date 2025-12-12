@@ -49,26 +49,16 @@ app.use(async (req, res, next) => {
 
 // eslint-disable-next-line @typescript-eslint/no-misused-promises
 const server = http.createServer(app);
-// server.headersTimeout = 0;
-// server.keepAliveTimeout = 0;
-// server.timeout = 0;
-// server.requestTimeout = 0;
 
-// Log when a new connection is made
-// server.on("connection", (socket) => {
-//   console.log("🟢 New connection established");
-//   socket.setTimeout(0);
-
-//   socket.resume();
-
-//   socket.on("close", () => {
-//     console.log("🔴 Connection closed");
-//   });
-
-//   socket.on("timeout", () => {
-//     console.log("⏰ Connection timed out");
-//   });
-// });
+server.on("connection", (socket) => {
+  console.log(chalk.gray("New connection established"));
+  socket.on("close", () => {
+    console.log(chalk.gray("Connection closed"));
+  });
+  socket.on("timeout", () => {
+    console.log(chalk.gray("Connection timed out"));
+  });
+});
 
 // For any request, simply pipe the request stream to the response.
 app.all("*", ((req, res) => {
@@ -84,7 +74,7 @@ app.all("*", ((req, res) => {
   ].join("\n");
   console.log(message);
   res.setHeader("Content-Type", req.headers["content-type"] ?? "text/plain");
-  res.send(message);
+  res.send(message + "\n");
 }) satisfies RequestHandler);
 
 server.listen(port, () => {

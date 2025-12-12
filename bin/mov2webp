@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+#
+# mov2webp.sh — convert a .mov to an animated WebP using ffmpeg
+# macOS-compatible
+#
+# Usage:
+#   ./mov2webp.sh input.mov [-o output.webp] [-f fps] [-w width] [-q quality] [-l loop]
+#
+# Options:
+#   input.mov                Input .mov file (required, positional)
+#   -o  Output .webp file    (default: same directory & base name as input)
+#   -f  Frames per second    (default: $DEFAULT_FPS)
+#   -w  Width in pixels      (auto-scales height; default: $DEFAULT_WIDTH)
+#   -q  Quality (0–100)      (higher = better; default: $DEFAULT_QUALITY)
+#   -l  Loop count           (0 = infinite; default: $DEFAULT_LOOP)
+#   -h  Show this help message
+
+set -euo pipefail
+
+# Defaults
+DEFAULT_FPS=30
+DEFAULT_WIDTH=480
+DEFAULT_QUALITY=80
+DEFAULT_LOOP=0
+
+fps=$DEFAULT_FPS
+width=$DEFAULT_WIDTH
+quality=$DEFAULT_QUALITY
+loop=$DEFAULT_LOOP
+output=""
+input=""
+
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") input.mov [-o output.webp] [-f fps] [-w width] [-q quality] [-l loop]
+
+Options:
+  input.mov                Input .mov file (required, positional)
+  -o  Output .webp file    (default: same directory & base name as input)
+  -f  Frames per second    (default: $DEFAULT_FPS)
+  -w  Width in pixels      (auto-scales height; default: $DEFAULT_WIDTH)
+  -q  Quality (0–100)      (higher = better; default: $DEFAULT_QUALITY)
+  -l  Loop count           (0 = infinite; default: $DEFAULT_LOOP)
+  -h  Show this help message
+EOF
+}
+
+# Parse optional flags
+while getopts "o:f:w:q:l:h" opt; do
+  case "$opt" in
+    o) output="$OPTARG" ;;
+    f) fps="$OPTARG" ;;
+    w) width="$OPTARG" ;;
+    q) quality="$OPTARG" ;;
+    l) loop="$OPTARG" ;;
+    h|*) usage; exit 0 ;;
+  esac
+done
+
+# Shift away parsed options to access the positional input file
+shift $((OPTIND - 1))
+
+# Grab positional input.mov
+input="${1:-}"
+
+if [[ -z "$input" ]]; then
+  echo "Error: input .mov file is required." >&2
+  usage
+  exit 1
+fi
+
+# Derive output path if not given
+if [[ -z "$output" ]]; then
+  dir=$(dirname "$input")
+  base=$(basename "$input")
+  name="${base%.*}"
+  output="$dir/$name.webp"
+fi
+
+echo "Converting '$input' to WebP at ${fps} fps, width ${width}px, quality ${quality}, loop=${loop}…"
+
+ffmpeg -v warning -i "$input" \
+  -vf "fps=${fps},scale=${width}:-1:flags=lanczos" \
+  -loop ${loop} \
+  -qscale ${quality} \
+  -y "$output"
+
+echo "✅ Done! WebP saved to $output"
