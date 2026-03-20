@@ -1,13 +1,21 @@
 #!/usr/bin/env tsx
 
-import { Command } from 'commander';
-import { execSync } from 'node:child_process';
+import { Command } from "commander";
+import { execSync } from "node:child_process";
+import { createInterface } from "node:readline";
+
+type CliOptions = {
+  username: string;
+  uid?: number;
+  gid?: number;
+  name: string;
+};
 
 type CreateServiceUserOptions = {
   username: string;
   uid: number;
   gid: number;
-  realName: string;
+  name: string;
 };
 
 function execCommand(
@@ -15,10 +23,10 @@ function execCommand(
   options?: { ignoreError?: boolean },
 ): string {
   try {
-    return execSync(command, { encoding: 'utf-8', stdio: 'pipe' }).trim();
+    return execSync(command, { encoding: "utf-8", stdio: "pipe" }).trim();
   } catch (error) {
     if (options?.ignoreError) {
-      return '';
+      return "";
     }
     throw error;
   }
@@ -34,10 +42,10 @@ function userExists(username: string): boolean {
 }
 
 function uidInUse(uid: number): boolean {
-  const output = execCommand('dscl . -list /Users UniqueID', {
+  const output = execCommand("dscl . -list /Users UniqueID", {
     ignoreError: true,
   });
-  const regex = new RegExp(`\\s${uid}$`, 'm');
+  const regex = new RegExp(`\\s${uid}$`, "m");
   return regex.test(output);
 }
 
@@ -45,10 +53,10 @@ function gidInUseByOtherGroup(
   gid: number,
   expectedGroup: string,
 ): string | null {
-  const output = execCommand('dscl . -list /Groups PrimaryGroupID', {
+  const output = execCommand("dscl . -list /Groups PrimaryGroupID", {
     ignoreError: true,
   });
-  const lines = output.split('\n');
+  const lines = output.split("\n");
 
   for (const line of lines) {
     const match = line.match(/^(\S+)\s+(\d+)$/);
@@ -63,8 +71,53 @@ function gidInUseByOtherGroup(
   return null;
 }
 
+function getUsedIds(type: "uid" | "gid"): Set<number> {
+  const command =
+    type === "uid"
+      ? "dscl . -list /Users UniqueID"
+      : "dscl . -list /Groups PrimaryGroupID";
+  const output = execCommand(command, { ignoreError: true });
+  const ids = new Set<number>();
+  for (const line of output.split("\n")) {
+    const match = line.match(/\s+(\d+)$/);
+    if (match) {
+      ids.add(parseInt(match[1], 10));
+    }
+  }
+  return ids;
+}
+
+function findNextAvailableId(type: "uid" | "gid"): number {
+  const usedIds = getUsedIds(type);
+  for (let id = 1001; ; id++) {
+    if (!usedIds.has(id)) {
+      return id;
+    }
+  }
+}
+
+function findNextAvailableUidGid(): number {
+  const usedUids = getUsedIds("uid");
+  const usedGids = getUsedIds("gid");
+  for (let id = 1001; ; id++) {
+    if (!usedUids.has(id) && !usedGids.has(id)) {
+      return id;
+    }
+  }
+}
+
+function promptUser(question: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim().toLowerCase());
+    });
+  });
+}
+
 function createServiceUser(options: CreateServiceUserOptions): void {
-  const { username, uid, gid, realName } = options;
+  const { username, uid, gid, name } = options;
   const homeDir = `/Users/${username}`;
 
   console.log(`Creating service user: ${username}`);
@@ -103,9 +156,7 @@ function createServiceUser(options: CreateServiceUserOptions): void {
   execCommand(
     `sudo dscl . -create "/Users/${username}" UserShell /usr/bin/false`,
   );
-  execCommand(
-    `sudo dscl . -create "/Users/${username}" RealName "${realName}"`,
-  );
+  execCommand(`sudo dscl . -create "/Users/${username}" RealName "${name}"`);
   execCommand(`sudo dscl . -create "/Users/${username}" UniqueID "${uid}"`);
   execCommand(
     `sudo dscl . -create "/Users/${username}" PrimaryGroupID "${gid}"`,
@@ -132,53 +183,92 @@ function createServiceUser(options: CreateServiceUserOptions): void {
 const program = new Command();
 
 program
-  .name('create-service-user')
+  .name("create-service-user")
   .description(
-    'Create a hidden service user on macOS with a specified UID and GID. ' +
-      'This tool creates a system user account that is hidden from the login window ' +
-      'and typically used for running background services.',
+    "Create a hidden service user on macOS with a specified UID and GID. " +
+      "This tool creates a system user account that is hidden from the login window " +
+      "and typically used for running background services.",
   )
-  .version('1.0.0')
+  .version("1.0.0")
   .requiredOption(
-    '-u, --username <username>',
-    'Username for the service user (must be unique)',
+    "-u, --username <username>",
+    "Username for the service user (must be unique)",
+  )
+  .option(
+    "--uid <uid>",
+    "User ID (UID) - must be unique and not already in use. If omitted, auto-detects next available UID >1000",
+    (value) => parseInt(value, 10),
+  )
+  .option(
+    "--gid <gid>",
+    "Group ID (GID) - must be unique or match an existing group with the same name. If omitted, auto-detects next available GID >1000",
+    (value) => parseInt(value, 10),
   )
   .requiredOption(
-    '--uid <uid>',
-    'User ID (UID) - must be unique and not already in use',
-    value => parseInt(value, 10),
-  )
-  .requiredOption(
-    '--gid <gid>',
-    'Group ID (GID) - must be unique or match an existing group with the same name',
-    value => parseInt(value, 10),
-  )
-  .requiredOption(
-    '-n, --real-name <realName>',
-    'Real name/display name for the service user',
+    "-n, --name <name>",
+    "Real name/display name for the service user",
   )
   .addHelpText(
-    'after',
+    "after",
     `
 Examples:
   $ create-service-user -u ssh-dropbox-su --uid 1003 --gid 1003 -n "SSH Dropbox Service User"
+  $ create-service-user -u ssh-dropbox-su -n "SSH Dropbox Service User"  # auto-detects UID/GID
   $ create-service-user --username my-service --uid 501 --gid 501 --real-name "My Service Account"
 
 Notes:
   - This script requires sudo privileges and will prompt for your password
   - The user will be created with /usr/bin/false as the shell (no login access)
   - The user account will be hidden from the login window
+  - If --uid or --gid is omitted, the next available ID >1000 is detected and you are prompted to confirm
   - If the user already exists, the script will exit successfully without making changes
   - The home directory will be created at /Users/<username> with 700 permissions
   `,
   )
-  .action((options: CreateServiceUserOptions) => {
+  .action(async (options: CliOptions) => {
     try {
-      createServiceUser(options);
+      if (options.uid == null || options.gid == null) {
+        let detectedUid: number;
+        let detectedGid: number;
+
+        if (options.uid == null && options.gid == null) {
+          const id = findNextAvailableUidGid();
+          detectedUid = id;
+          detectedGid = id;
+        } else {
+          detectedUid = options.uid ?? findNextAvailableId("uid");
+          detectedGid = options.gid ?? findNextAvailableId("gid");
+        }
+
+        const parts: string[] = [];
+        if (options.uid == null) parts.push(`UID: ${detectedUid}`);
+        if (options.gid == null) parts.push(`GID: ${detectedGid}`);
+
+        const answer = await promptUser(
+          `No ${options.uid == null && options.gid == null ? "--uid/--gid" : options.uid == null ? "--uid" : "--gid"} provided. Detected next available: ${parts.join(", ")}. Use ${parts.length > 1 ? "these" : "this"}? (y/n) `,
+        );
+
+        if (answer !== "y" && answer !== "yes") {
+          console.log("Aborted.");
+          process.exit(0);
+        }
+
+        options.uid = detectedUid;
+        options.gid = detectedGid;
+      }
+
+      if (!options.uid || !options.gid) {
+        console.error(
+          "Error: Unable to determine UID or GID. Please specify both --uid and --gid or allow the script to auto-detect them.",
+        );
+        process.exit(1);
+      }
+
+      createServiceUser({ ...options, uid: options.uid, gid: options.gid });
       process.exit(0);
     } catch (error) {
       console.error(
-        'Error:',
+        "Error:",
         error instanceof Error ? error.message : String(error),
       );
       process.exit(1);
