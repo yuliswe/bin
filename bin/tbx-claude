@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+#
+# Run Claude Code as the sandbox user `coding-agent-su`, pointed at the Toolbx
+# (tbx) config dir. Standalone port of the `tbx-claude` shell function that
+# used to live in ~/.bash_aliases, so it works as a plain command on PATH.
+set -eu
+
+CLAUDE_CONFIG_DIR="/Users/yuli/lab/.tbx-claude" \
+TMPDIR='' \
+exec sudo -E -u coding-agent-su /opt/homebrew/bin/claude "$@"
