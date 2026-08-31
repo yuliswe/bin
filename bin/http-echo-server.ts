@@ -26,10 +26,12 @@ const { port } = parseArgs();
 
 const app = express();
 
+const MAX_BODY_SIZE = "1gb";
+
 // --- 1. Middleware to parse known content types ---
-app.use(bodyParser.json()); // application/json
-app.use(bodyParser.urlencoded({ extended: true })); // form data
-app.use(bodyParser.text()); // text/plain
+app.use(bodyParser.json({ limit: MAX_BODY_SIZE })); // application/json
+app.use(bodyParser.urlencoded({ extended: true, limit: MAX_BODY_SIZE })); // form data
+app.use(bodyParser.text({ limit: MAX_BODY_SIZE })); // text/plain
 
 // --- 2. Fallback middleware to parse raw body for unknown types ---
 app.use(async (req, res, next) => {
@@ -39,7 +41,7 @@ app.use(async (req, res, next) => {
   } // already parsed
 
   try {
-    const raw = await rawBodyParser(req);
+    const raw = await rawBodyParser(req, { limit: MAX_BODY_SIZE });
     req.body = raw.toString(); // you can keep it as Buffer if needed
     next();
   } catch (err) {
@@ -70,7 +72,12 @@ app.all("*", ((req, res) => {
     chalk.cyan(`[${timestamp}] ${req.method} ${req.url}`),
     chalk.yellow(`Your IP: ${ip}`),
     chalk.gray(inspect(req.headers)),
-    inspect(req.body, { depth: null }),
+    inspect(req.body, {
+      depth: null,
+      maxArrayLength: Infinity,
+      maxStringLength: Infinity,
+      breakLength: Infinity,
+    }),
   ].join("\n");
   console.log(message);
   res.setHeader("Content-Type", req.headers["content-type"] ?? "text/plain");
